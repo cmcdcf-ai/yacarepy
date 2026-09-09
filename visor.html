@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>YacaréPy v0.3 — Reporte Distrital | Sur Alto Paraná</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+  body { margin: 0; }
+  #mapa { width: 100vw; height: 100vh; }
+  #panel { position: absolute; top: 12px; left: 12px; z-index: 2;
+           background: rgba(15,23,42,.88); color: #fff; padding: 12px 16px;
+           border-radius: 10px; font-family: system-ui; font-size: 13px;
+           line-height: 1.6; max-width: 360px; }
+  #panel h1 { font-size: 15px; margin: 0 0 4px; }
+</style>
+</head>
+<body>
+<div id="mapa"></div>
+<div id="panel">
+  <h1>🐊 YacaréPy v0.3 — Sur Alto Paraná</h1>
+  <span id="contador">Cargando…</span><br>
+  <span id="topdist"></span><br>
+  🔴 ALTA: 2+ satélites · 🟡 SOSPECHA: 1 sensor<br>
+  🟠 MEDIA: pérdida de bosque (Fase 2)
+</div>
+<script>
+const map = new maplibregl.Map({
+  container: 'mapa',
+  style: {
+    version: 8,
+    sources: { esri: { type: 'raster',
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256, attribution: '© Esri, Maxar, Earthstar Geographics' } },
+    layers: [{ id: 'esri', type: 'raster', source: 'esri' }]
+  },
+  center: [-55.0, -25.85], zoom: 8.5, maxZoom: 19
+});
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+map.on('load', () => {
+    fetch('alertas.geojson?v=' + Date.now()).then(r => r.json()).then(geo => {
+    const altas = geo.features.filter(f => f.properties.nivel === 'ALTA').length;
+    document.getElementById('contador').textContent =
+      geo.features.length + ' alertas | ' + altas + ' ALTA confianza';
+    const por = {};
+    geo.features.forEach(f => { por[f.properties.distrito] = (por[f.properties.distrito] || 0) + 1; });
+    document.getElementById('topdist').innerHTML =
+      '<strong>Top distritos:</strong> ' +
+      Object.entries(por).sort((a, b) => b[1] - a[1]).slice(0, 3)
+        .map(([d, n]) => d + ' (' + n + ')').join(' · ');
+
+    map.addSource('alertas', { type: 'geojson', data: geo });
+    map.addLayer({
+      id: 'puntos', type: 'circle', source: 'alertas',
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 7, 5, 12, 10, 17, 16],
+        'circle-color': ['match', ['get', 'nivel'], 'ALTA', '#ef4444', 'MEDIA', '#f97316', '#facc15'],
+        'circle-opacity': 0.85, 'circle-stroke-width': 1.5, 'circle-stroke-color': '#ffffff'
+      }
+    });
+    map.on('click', 'puntos', e => {
+      const p = e.features[0].properties;
+      new maplibregl.Popup({ maxWidth: '330px' })
+        .setLngLat(e.lngLat)
+        .setHTML('<strong>' + p.nivel + ' — ' + p.distrito + '</strong><br>' + p.detalle +
+                 '<br><em>Coords: ' + p.coords + '</em>')
+        .addTo(map);
+    });
+    map.on('mouseenter', 'puntos', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'puntos', () => map.getCanvas().style.cursor = '');
+  }).catch(err => {
+    document.getElementById('contador').textContent = 'Error cargando alertas: ' + err;
+  });
+});
+</script>
+</body>
+</html>
