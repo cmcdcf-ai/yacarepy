@@ -1,6 +1,6 @@
 # =====================================================
-# YACARÉPY v2.6 - Detector SEMANAL + Priorización Institucional
-# v2.6: credenciales por entorno (Actions) o credenciales.json (local)
+# YACARÉPY v2.7 - Detector SEMANAL + Priorización + Capa visible de deforestación
+# v2.7: deforestacion.geojson para el visor + credenciales con .strip()
 # Costo: $0 | Dependencias: NINGUNA (stdlib Python 3)
 # =====================================================
 import json, csv, io, math, re, os, urllib.request, urllib.error, urllib.parse
@@ -21,7 +21,7 @@ def cargar_credenciales():
                 creds[k] = str(loc.get(k, ""))
     except Exception:
         pass
-    return creds
+    return {k: (v or "").strip() for k, v in creds.items()}
 
 C = cargar_credenciales()
 
@@ -426,7 +426,7 @@ def enviar_telegram(texto):
 def main():
     hoy = datetime.now().strftime("%Y-%m-%d")
     print("=" * 64)
-    print(f"YACARÉPY v2.6 | Detector SEMANAL + Priorización | {hoy}")
+    print(f"YACARÉPY v2.7 | Detector SEMANAL + Capa visible | {hoy}")
     print("=" * 64)
     if not C["FIRMS_API_KEY"]:
         print("[ERROR] Falta FIRMS_API_KEY (entorno o credenciales.json)")
@@ -439,7 +439,7 @@ def main():
         print(f"  [{fu}] detecciones: {len(pts)}")
         todas.extend(pts)
     if not todas:
-        enviar_telegram(f"🐊 YACARÉPY v2.6 — {hoy}\n⚠️ Fuentes de fuego sin datos. "
+        enviar_telegram(f"🐊 YACARÉPY v2.7 — {hoy}\n⚠️ Fuentes de fuego sin datos. "
                         f"Se conserva el último reporte válido.")
         return
 
@@ -554,8 +554,31 @@ def main():
         print("   (sin cruces)")
     print(f"   Cobertura oficial: {len(CODIGOS_ADM2)}/9 (sin código: {', '.join(SIN_CODIGO_OFICIAL)})")
 
+    # ----- CAPA VISIBLE: deforestación oficial por distrito para el visor -----
+    defor_feats = []
+    for nom, c in CODIGOS_ADM2.items():
+        s = sem.get(c)
+        if not s:
+            continue
+        p, tags = prio[nom]
+        cruce = any(x[0] == nom for x in cambio)
+        la, lo = CENTROIDES[nom]
+        defor_feats.append({
+            "type": "Feature",
+            "geometry": {"type": "Point", "coordinates": [lo, la]},
+            "properties": {"distrito": nom, "ha_14d": round(s["ha"], 1),
+                           "ha_alta": round(s["ha_alta"], 1), "ultima": s["ultima"],
+                           "prioridad": p, "cruce_fuego": cruce,
+                           "fuente": "GFW Integrated Alerts (oficial)",
+                           "latencia_dias": (datetime.now() - parse_fecha(corte_oficial)).days if corte_oficial else None}
+        })
+    with open("deforestacion.geojson", "w", encoding="utf-8") as f:
+        json.dump({"type": "FeatureCollection", "features": defor_feats}, f, ensure_ascii=False)
+    print(f"[OUT] deforestacion.geojson -> {len(defor_feats)} distritos con pérdida oficial")
+
+    # ----- BOLETÍN -----
     lat_txt = f" | dato oficial hasta {corte_oficial}" if corte_oficial else ""
-    lineas = [f"🐊 YACARÉPY v2.6 — {hoy}",
+    lineas = [f"🐊 YACARÉPY v2.7 — {hoy}",
               f"🔥 7d: {len(merged)} | 🔴 {altas} ALTA | ⚠️ {criticas} en distritos CRÍTICOS{lat_txt}", "",
               "── 🚨 CAMBIO DE USO ACTIVO (semanal) ──"]
     if cambio:
