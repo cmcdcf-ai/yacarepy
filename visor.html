@@ -2,27 +2,31 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>YacaréPy v0.4 — Sur Alto Paraná</title>
+<title>YacaréPy v0.5 — Sur Alto Paraná</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
   html,body,#map{height:100%;margin:0}
   #panel{position:absolute;top:10px;left:10px;z-index:999;background:rgba(15,23,42,.88);
-         color:#e2e8f0;font:12px/1.5 system-ui,sans-serif;padding:10px 14px;border-radius:8px;max-width:360px}
+         color:#e2e8f0;font:12px/1.5 system-ui,sans-serif;padding:10px 14px;border-radius:8px;max-width:380px}
   #panel h1{font-size:13px;margin:0 0 6px}
   .k{color:#94a3b8}
+  .distlabel{background:none;border:none;box-shadow:none;color:#fff;font:700 11px system-ui;
+             text-shadow:0 0 4px #000; white-space:nowrap}
 </style>
 </head>
 <body>
 <div id="map"></div>
 <div id="panel">
-  <h1>🐊 YacaréPy v0.4 — Sur Alto Paraná</h1>
+  <h1>🐊 YacaréPy v0.5 — Sur Alto Paraná</h1>
   <div id="stats">cargando…</div>
   <div class="k">
-    🔴 ALTA: fuego 2+ satélites · 🟡 SOSPECHA: 1 sensor<br>
-    🟠 Círculo = pérdida oficial de vegetación (14 d); tamaño = hectáreas<br>
-    🚨 Borde rojo del círculo = cruce con fuego confirmado
+    🔴 ALTA: fuego 2+ satélites (ubicación puntual real)<br>
+    🟡 SOSPECHA: 1 sensor (ubicación puntual real)<br>
+    🟠 Círculo punteado = TOTAL distrital de pérdida oficial (14 d);
+    tamaño = hectáreas. <b>Ubicado en el centroide del distrito: NO es un punto de tala.</b><br>
+    🚨 Borde rojo = distrito con cruce fuego+pérdida
   </div>
 </div>
 <script>
@@ -45,7 +49,8 @@ fetch('alertas.geojson?v=' + Date.now()).then(r => r.json()).then(geo => {
     }).addTo(map).bindPopup(
       `<b>${p.nivel}</b> — ${p.distrito}<br>${p.detalle}<br>
        Prioridad: ${p.prioridad_institucional || '—'}<br>
-       Primera vista: ${p.primera_vista || '—'}`);
+       Primera vista: ${p.primera_vista || '—'}<br>
+       <span class="k">Ubicación puntual: píxel satelital (~375 m)</span>`);
   });
 
   fetch('deforestacion.geojson?v=' + Date.now()).then(r => r.json()).then(def => {
@@ -57,14 +62,20 @@ fetch('alertas.geojson?v=' + Date.now()).then(r => r.json()).then(geo => {
         radius: 8 + Math.min(30, Math.sqrt(p.ha_alta) * 2),
         color: p.cruce_fuego ? '#ef4444' : '#f97316',
         weight: p.cruce_fuego ? 3 : 2,
-        fillColor: '#fb923c', fillOpacity: .25
-      }).addTo(map).bindPopup(
-        `<b>🟠 ${p.distrito}</b><br>
+        dashArray: '4 4',
+        fillColor: '#fb923c', fillOpacity: .15
+      }).addTo(map)
+      .bindTooltip(p.distrito, {permanent: true, direction: 'center', className: 'distlabel'})
+      .bindPopup(
+        `<b>🟠 ${p.distrito} — TOTAL DISTRITAL</b><br>
+         ⚠️ Símbolo en el centroide del distrito: la fuente oficial
+         <b>no proporciona ubicación puntual</b> de la pérdida.<br>
          Pérdida oficial 14 d: ${p.ha_14d} ha (alta conf: ${p.ha_alta} ha)<br>
          Última alerta oficial: ${p.ultima}<br>
          Prioridad jurisdiccional: ${p.prioridad}<br>
          Cruce con fuego confirmado: ${p.cruce_fuego ? '🚨 SÍ' : 'no'}<br>
-         <span class="k">Fuente: ${p.fuente} · latencia ${p.latencia_dias} d</span>`);
+         <span class="k">Fuente: ${p.fuente} · latencia ${p.latencia_dias} d ·
+         universo: toda vegetación (incluye ciclos agrícolas)</span>`);
     });
     document.getElementById('stats').innerHTML =
       `${geo.features.length} alertas de fuego | ${alta} ALTA<br>` +
