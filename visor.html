@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>YacaréPy v0.5 — Sur Alto Paraná</title>
+<title>YacaréPy v0.6 — Sur Alto Paraná</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -19,14 +19,14 @@
 <body>
 <div id="map"></div>
 <div id="panel">
-  <h1>🐊 YacaréPy v0.5 — Sur Alto Paraná</h1>
+  <h1>🐊 YacaréPy v0.6 — Sur Alto Paraná</h1>
   <div id="stats">cargando…</div>
   <div class="k">
     🔴 ALTA: fuego 2+ satélites (ubicación puntual real)<br>
     🟡 SOSPECHA: 1 sensor (ubicación puntual real)<br>
-    🟠 Círculo punteado = TOTAL distrital de pérdida oficial (14 d);
-    tamaño = hectáreas. <b>Ubicado en el centroide del distrito: NO es un punto de tala.</b><br>
-    🚨 Borde rojo = distrito con cruce fuego+pérdida
+    🟠 Círculo punteado = TOTAL distrital de pérdida oficial (14 d)<br>
+    🟥 <b>Polígono rojo = tala real detectada por Sentinel-2</b> (NDVI antes/después)<br>
+    🚨 Borde grueso = cruce con fuego confirmado
   </div>
 </div>
 <script>
@@ -77,12 +77,51 @@ fetch('alertas.geojson?v=' + Date.now()).then(r => r.json()).then(geo => {
          <span class="k">Fuente: ${p.fuente} · latencia ${p.latencia_dias} d ·
          universo: toda vegetación (incluye ciclos agrícolas)</span>`);
     });
-    document.getElementById('stats').innerHTML =
-      `${geo.features.length} alertas de fuego | ${alta} ALTA<br>` +
-      `${def.features.length} distritos con pérdida oficial | ${cruces} con cruce 🚨`;
+
+    fetch('tala_copernicus.geojson?v=' + Date.now()).then(r => r.json()).then(tala => {
+      let tala_cruce = 0;
+      tala.features.forEach(f => {
+        const p = f.properties;
+        if (p.cruce_fuego) tala_cruce++;
+        const coords = f.geometry.coordinates[0];
+        const clat = (coords[0][1] + coords[2][1]) / 2;
+        const clon = (coords[0][0] + coords[2][0]) / 2;
+        const popup =
+          `<b>🟥 TALA REAL DETECTADA</b> — ${p.distrito}<br>
+           NDVI antes: ${p.ndvi_antes} (bosque denso)<br>
+           NDVI después: ${p.ndvi_despues} (suelo expuesto)<br>
+           Caída NDVI: ${p.delta_ndvi}<br>
+           Área aproximada: ${p.ha_aprox} ha<br>
+           Ventana antes: ${p.ventana_antes}<br>
+           Ventana después: ${p.ventana_despues}<br>
+           Cruce con fuego: ${p.cruce_fuego ? '🚨 SÍ' : 'no'}<br>
+           <span class="k">Fuente: ${p.fuente} · resolución ${p.res_m} m<br>
+           Discrimina tala real de fenología estacional y agricultura</span>`;
+        // Polígono real (pie verdadero, visible al hacer zoom 14+)
+        L.polygon(coords, {
+          color: p.cruce_fuego ? '#ef4444' : '#dc2626',
+          weight: p.cruce_fuego ? 3 : 2,
+          fillColor: '#ef4444', fillOpacity: .7
+        }).addTo(map).bindPopup(popup);
+        // Marcador de ubicación (visible a cualquier zoom)
+        L.circleMarker([clat, clon], {
+          radius: 4, color: '#7f1d1d', weight: 1,
+          fillColor: '#ef4444', fillOpacity: .95
+        }).addTo(map).bindPopup(popup);
+      });
+         document.getElementById('stats').innerHTML =
+        `${geo.features.length} alertas de fuego | ${alta} ALTA<br>` +
+        `${def.features.length} distritos con pérdida oficial | ${cruces} con cruce 🚨<br>` +
+        `<b>${tala.features.length} parches de tala real</b> | ${tala_cruce} con fuego`;
+    }).catch(() => {
+      document.getElementById('stats').innerHTML =
+        `${geo.features.length} alertas de fuego | ${alta} ALTA<br>` +
+        `${def.features.length} distritos con pérdida oficial | ${cruces} con cruce 🚨<br>` +
+        '(capa tala Copernicus aún sin datos)';
+    });
   }).catch(() => {
     document.getElementById('stats').innerHTML =
-      `${geo.features.length} alertas de fuego | ${alta} ALTA<br>(capa deforestación aún sin datos)`;
+      `${geo.features.length} alertas de fuego | ${alta} ALTA<br>(capas deforestación aún sin datos)`;
   });
 }).catch(e => {
   document.getElementById('stats').innerHTML = 'sin datos aún (ejecutá el pipeline)';
