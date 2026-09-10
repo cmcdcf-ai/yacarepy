@@ -13,14 +13,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Ejecutar pipeline
+      - name: Instalar dependencias
+        run: pip install pillow
+      - name: Ejecutar pipeline fuego
         env:
           FIRMS_API_KEY: ${{ secrets.FIRMS_API_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python modulo1_ingesta.py
+      - name: Ejecutar modulo Copernicus
+        env:
+          COPERNICUS_USER: ${{ secrets.COPERNICUS_USER }}
+          COPERNICUS_PASS: ${{ secrets.COPERNICUS_PASS }}
+        run: python modulo2_copernicus.py
       - name: Publicar datos actualizados
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "YacarePy: reporte diario automatico"
-          file_pattern: alertas.geojson deforestacion.geojson
+          file_pattern: alertas.geojson deforestacion.geojson tala_copernicus.geojson
